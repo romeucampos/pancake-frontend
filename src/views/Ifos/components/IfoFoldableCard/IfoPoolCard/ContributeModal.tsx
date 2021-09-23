@@ -2,17 +2,17 @@ import React, { useState } from 'react'
 import { useWeb3React } from '@web3-react/core'
 import BigNumber from 'bignumber.js'
 import { ethers } from 'ethers'
+import { parseUnits } from 'ethers/lib/utils'
 import { Modal, ModalBody, Text, Image, Button, BalanceInput, Flex } from '@pancakeswap/uikit'
 import { PoolIds, Ifo } from 'config/constants/types'
-import { WalletIfoData, PublicIfoData } from 'hooks/ifo/types'
+import { WalletIfoData, PublicIfoData } from 'views/Ifos/types'
 import { useTranslation } from 'contexts/Localization'
 import { getBalanceAmount } from 'utils/formatBalance'
-import { getAddress } from 'utils/addressHelpers'
-import ApproveConfirmButtons from 'views/Profile/components/ApproveConfirmButtons'
+import ApproveConfirmButtons from 'components/ApproveConfirmButtons'
 import useApproveConfirmTransaction from 'hooks/useApproveConfirmTransaction'
+import { useCallWithGasPrice } from 'hooks/useCallWithGasPrice'
 import { DEFAULT_TOKEN_DECIMAL } from 'config'
 import { useERC20 } from 'hooks/useContract'
-import { BIG_NINE, BIG_TEN } from 'utils/bigNumber'
 
 interface Props {
   poolId: PoolIds
@@ -20,14 +20,14 @@ interface Props {
   publicIfoData: PublicIfoData
   walletIfoData: WalletIfoData
   userCurrencyBalance: BigNumber
-  onSuccess: (amount: BigNumber) => void
+  onSuccess: (amount: BigNumber, txHash: string) => void
   onDismiss?: () => void
 }
 
 const multiplierValues = [0.1, 0.25, 0.5, 0.75, 1]
 
 // Default value for transaction setting, tweak based on BSC network congestion.
-const gasPrice = BIG_TEN.times(BIG_TEN.pow(BIG_NINE)).toString()
+const gasPrice = parseUnits('10', 'gwei').toString()
 
 const ContributeModal: React.FC<Props> = ({
   poolId,
@@ -47,7 +47,8 @@ const ContributeModal: React.FC<Props> = ({
   const { contract } = walletIfoData
   const [value, setValue] = useState('')
   const { account } = useWeb3React()
-  const raisingTokenContract = useERC20(getAddress(currency.address))
+  const { callWithGasPrice } = useCallWithGasPrice()
+  const raisingTokenContract = useERC20(currency.address)
   const { t } = useTranslation()
   const valueWithTokenDecimals = new BigNumber(value).times(DEFAULT_TOKEN_DECIMAL)
 
@@ -55,25 +56,30 @@ const ContributeModal: React.FC<Props> = ({
     useApproveConfirmTransaction({
       onRequiresApproval: async () => {
         try {
-          const response = await raisingTokenContract.methods.allowance(account, contract.options.address).call()
-          const currentAllowance = new BigNumber(response)
+          const response = await raisingTokenContract.allowance(account, contract.address)
+          const currentAllowance = new BigNumber(response.toString())
           return currentAllowance.gt(0)
         } catch (error) {
           return false
         }
       },
       onApprove: () => {
-        return raisingTokenContract.methods
-          .approve(contract.options.address, ethers.constants.MaxUint256)
-          .send({ from: account, gasPrice })
+        return callWithGasPrice(raisingTokenContract, 'approve', [contract.address, ethers.constants.MaxUint256], {
+          gasPrice,
+        })
       },
       onConfirm: () => {
-        return contract.methods
-          .depositPool(valueWithTokenDecimals.toString(), poolId === PoolIds.poolBasic ? 0 : 1)
-          .send({ from: account, gasPrice })
+        return callWithGasPrice(
+          contract,
+          'depositPool',
+          [valueWithTokenDecimals.toString(), poolId === PoolIds.poolBasic ? 0 : 1],
+          {
+            gasPrice,
+          },
+        )
       },
-      onSuccess: async () => {
-        await onSuccess(valueWithTokenDecimals)
+      onSuccess: async ({ receipt }) => {
+        await onSuccess(valueWithTokenDecimals, receipt.transactionHash)
         onDismiss()
       },
     })

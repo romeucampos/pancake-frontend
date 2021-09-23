@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
-import BigNumber from 'bignumber.js'
 import { useWeb3React } from '@web3-react/core'
 import { Button, Flex, Text, InjectedModalProps } from '@pancakeswap/uikit'
-import { getFullDisplayBalance } from 'utils/formatBalance'
+import { formatBigNumber } from 'utils/formatBalance'
 import { getPancakeProfileAddress } from 'utils/addressHelpers'
 import { useCake } from 'hooks/useContract'
+import { FetchStatus, useGetCakeBalance } from 'hooks/useTokenBalance'
 import { useTranslation } from 'contexts/Localization'
-import useGetProfileCosts from 'hooks/useGetProfileCosts'
-import useHasCakeBalance from 'hooks/useHasCakeBalance'
-import { useProfile } from 'state/hooks'
+import useGetProfileCosts from 'views/Profile/hooks/useGetProfileCosts'
+import ProfileAvatarWithTeam from 'components/ProfileAvatarWithTeam'
+import { useProfile } from 'state/profile/hooks'
 import { UseEditProfileResponse } from './reducer'
-import ProfileAvatar from '../ProfileAvatar'
 
 interface StartPageProps extends InjectedModalProps {
   goToChange: UseEditProfileResponse['goToChange']
@@ -45,7 +44,8 @@ const StartPage: React.FC<StartPageProps> = ({ goToApprove, goToChange, goToRemo
   const { profile } = useProfile()
   const { numberCakeToUpdate, numberCakeToReactivate } = useGetProfileCosts()
   const minimumCakeRequired = profile.isActive ? numberCakeToUpdate : numberCakeToReactivate
-  const hasMinimumCakeRequired = useHasCakeBalance(minimumCakeRequired)
+  const { balance: cakeBalance, fetchStatus } = useGetCakeBalance()
+  const hasMinimumCakeRequired = fetchStatus === FetchStatus.SUCCESS && cakeBalance.gte(minimumCakeRequired)
   const { t } = useTranslation()
   const { account } = useWeb3React()
   const cakeContract = useCake()
@@ -57,9 +57,8 @@ const StartPage: React.FC<StartPageProps> = ({ goToApprove, goToChange, goToRemo
    */
   useEffect(() => {
     const checkApprovalStatus = async () => {
-      const response = await cakeContract.methods.allowance(account, getPancakeProfileAddress()).call()
-      const currentAllowance = new BigNumber(response)
-      setNeedsApproval(currentAllowance.lt(cost))
+      const response = await cakeContract.allowance(account, getPancakeProfileAddress())
+      setNeedsApproval(response.lt(cost))
     }
 
     if (account) {
@@ -74,12 +73,12 @@ const StartPage: React.FC<StartPageProps> = ({ goToApprove, goToChange, goToRemo
   return (
     <Flex alignItems="center" justifyContent="center" flexDirection="column">
       <AvatarWrapper>
-        <ProfileAvatar profile={profile} />
+        <ProfileAvatarWithTeam profile={profile} />
       </AvatarWrapper>
       <Flex alignItems="center" style={{ height: '48px' }} justifyContent="center">
         <Text as="p" color="failure">
           {!hasMinimumCakeRequired &&
-            t('%minimum% CAKE required to change profile pic', { minimum: getFullDisplayBalance(minimumCakeRequired) })}
+            t('%minimum% CAKE required to change profile pic', { minimum: formatBigNumber(minimumCakeRequired) })}
         </Text>
       </Flex>
       {profile.isActive ? (

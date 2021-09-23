@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useWeb3React } from '@web3-react/core'
 import { useModal } from '@pancakeswap/uikit'
-import { useProfile } from 'state/hooks'
-import { useEasterNftContract } from 'hooks/useContract'
-import NftGiveawayModal from './NftGiveawayModal'
+import { useWeb3React } from '@web3-react/core'
+import { useAnniversaryAchievementContract } from 'hooks/useContract'
+import AnniversaryAchievementModal from './AnniversaryAchievementModal'
 
 interface GlobalCheckClaimStatusProps {
   excludeLocations: string[]
@@ -18,35 +17,33 @@ interface GlobalCheckClaimStatusProps {
  */
 const GlobalCheckClaimStatus: React.FC<GlobalCheckClaimStatusProps> = ({ excludeLocations }) => {
   const hasDisplayedModal = useRef(false)
-  const [isClaimable, setIsClaimable] = useState(false)
-  const [onPresentGiftModal] = useModal(<NftGiveawayModal />)
-  const easterNftContract = useEasterNftContract()
-  const { profile } = useProfile()
+  const [canClaimAnniversaryPoints, setCanClaimAnniversaryPoints] = useState(false)
   const { account } = useWeb3React()
   const { pathname } = useLocation()
+  const { canClaim, claimAnniversaryPoints } = useAnniversaryAchievementContract()
+  const [onPresentAnniversaryModal] = useModal(<AnniversaryAchievementModal onClick={claimAnniversaryPoints} />)
 
   // Check claim status
   useEffect(() => {
-    const fetchClaimStatus = async () => {
-      const canClaim = await easterNftContract.methods.canClaim(account).call()
-      setIsClaimable(canClaim)
+    const fetchClaimAnniversaryStatus = async () => {
+      const canClaimAnniversary = await canClaim(account)
+      setCanClaimAnniversaryPoints(canClaimAnniversary)
     }
 
-    // Wait until we have a profile
-    if (account && profile) {
-      fetchClaimStatus()
+    if (account) {
+      fetchClaimAnniversaryStatus()
     }
-  }, [easterNftContract, account, profile, setIsClaimable])
+  }, [account, canClaim])
 
   // Check if we need to display the modal
   useEffect(() => {
     const matchesSomeLocations = excludeLocations.some((location) => pathname.includes(location))
 
-    if (isClaimable && !matchesSomeLocations && !hasDisplayedModal.current) {
-      onPresentGiftModal()
+    if (canClaimAnniversaryPoints && !matchesSomeLocations && !hasDisplayedModal.current) {
+      onPresentAnniversaryModal()
       hasDisplayedModal.current = true
     }
-  }, [pathname, isClaimable, excludeLocations, hasDisplayedModal, onPresentGiftModal])
+  }, [pathname, excludeLocations, hasDisplayedModal, onPresentAnniversaryModal, canClaimAnniversaryPoints])
 
   // Reset the check flag when account changes
   useEffect(() => {

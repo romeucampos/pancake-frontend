@@ -1,16 +1,16 @@
 import React from 'react'
 import styled from 'styled-components'
 import { Flex, Link, Skeleton, Text, TimerIcon } from '@pancakeswap/uikit'
-import { getBscScanBlockCountdownUrl } from 'utils/bscscan'
-import { Pool } from 'state/types'
-import { useBlock } from 'state/hooks'
+import { getBscScanLink } from 'utils'
+import { DeserializedPool } from 'state/types'
+import { useBlock } from 'state/block/hooks'
 import Balance from 'components/Balance'
 import { useTranslation } from 'contexts/Localization'
 import { getPoolBlockInfo } from 'views/Pools/helpers'
 import BaseCell, { CellContent } from './BaseCell'
 
 interface FinishCellProps {
-  pool: Pool
+  pool: DeserializedPool
 }
 
 const StyledCell = styled(BaseCell)`
@@ -38,7 +38,7 @@ const EndsInCell: React.FC<FinishCellProps> = ({ pool }) => {
       <Flex flex="1">
         <Link
           external
-          href={getBscScanBlockCountdownUrl(hasPoolStarted ? endBlock : startBlock)}
+          href={getBscScanLink(hasPoolStarted ? endBlock : startBlock, 'countdown')}
           onClick={(e) => e.stopPropagation()}
         >
           <TimerIcon ml="4px" />

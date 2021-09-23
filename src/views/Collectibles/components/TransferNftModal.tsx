@@ -1,13 +1,15 @@
 import React, { useState } from 'react'
 import styled from 'styled-components'
-import Web3 from 'web3'
+import { ethers } from 'ethers'
 import { useWeb3React } from '@web3-react/core'
 import { Button, Input, Modal, Text } from '@pancakeswap/uikit'
-import { getAddressByType } from 'utils/collectibles'
-import { Nft } from 'config/constants/types'
+import { getBunnyNftAddress } from 'utils/collectibles'
+import { Nft } from 'config/constants/nfts/types'
 import { useTranslation } from 'contexts/Localization'
 import useToast from 'hooks/useToast'
 import { useERC721 } from 'hooks/useContract'
+import { useCallWithGasPrice } from 'hooks/useCallWithGasPrice'
+import { ToastDescriptionWithTx } from 'components/Toast'
 import InfoRow from './InfoRow'
 
 interface TransferNftModalProps {
@@ -44,32 +46,29 @@ const TransferNftModal: React.FC<TransferNftModalProps> = ({ nft, tokenIds, onSu
   const [error, setError] = useState(null)
   const { t } = useTranslation()
   const { account } = useWeb3React()
-  const contract = useERC721(getAddressByType(nft.type))
+  const contract = useERC721(getBunnyNftAddress())
   const { toastSuccess } = useToast()
+  const { callWithGasPrice } = useCallWithGasPrice()
 
   const handleConfirm = async () => {
     try {
-      const isValidAddress = Web3.utils.isAddress(value)
+      const isValidAddress = ethers.utils.isAddress(value)
 
       if (!isValidAddress) {
         setError(t('Please enter a valid wallet address'))
       } else {
-        await contract.methods
-          .transferFrom(account, value, tokenIds[0])
-          .send({ from: account })
-          .on('sending', () => {
-            setIsLoading(true)
-          })
-          .on('receipt', () => {
-            onDismiss()
-            onSuccess()
-            toastSuccess(t('NFT successfully transferred!'))
-          })
-          .on('error', () => {
-            console.error(error)
-            setError(t('Unable to transfer NFT'))
-            setIsLoading(false)
-          })
+        const tx = await callWithGasPrice(contract, 'transferFrom', [account, value, tokenIds[0]])
+        setIsLoading(true)
+        // TODO: Refactor to try/catch pattern so error state is properly handled
+        const receipt = await tx.wait()
+        if (receipt.status) {
+          onDismiss()
+          onSuccess()
+          toastSuccess(t('NFT successfully transferred!'), <ToastDescriptionWithTx txHash={receipt.transactionHash} />)
+        } else {
+          setError(t('Unable to transfer NFT'))
+          setIsLoading(false)
+        }
       }
     } catch (err) {
       console.error('Unable to transfer NFT:', err)

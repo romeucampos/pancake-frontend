@@ -1,9 +1,9 @@
 import React from 'react'
 import { CardHeader, Heading, Text, Flex } from '@pancakeswap/uikit'
+import { Token } from '@pancakeswap/sdk'
 import styled from 'styled-components'
 import { useTranslation } from 'contexts/Localization'
-import { Token } from 'config/constants/types'
-import TokenPairImage from 'components/TokenPairImage'
+import { TokenPairImage } from 'components/TokenImage'
 import CakeVaultTokenPairImage from '../CakeVaultCard/CakeVaultTokenPairImage'
 
 const Wrapper = styled(CardHeader)<{ isFinished?: boolean; background?: string }>`

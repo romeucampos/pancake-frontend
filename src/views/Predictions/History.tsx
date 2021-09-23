@@ -2,19 +2,19 @@ import React, { useEffect, useState } from 'react'
 import { Flex, Spinner, Text } from '@pancakeswap/uikit'
 import { useWeb3React } from '@web3-react/core'
 import styled from 'styled-components'
-import UnlockButton from 'components/UnlockButton'
+import ConnectWalletButton from 'components/ConnectWalletButton'
 import { useTranslation } from 'contexts/Localization'
-import { fetchHistory } from 'state/predictions'
-import { getUnclaimedWinningBets } from 'state/predictions/helpers'
-import { HistoryFilter } from 'state/types'
+import { fetchNodeHistory } from 'state/predictions'
+import { getFilteredBets } from 'state/predictions/helpers'
 import { useAppDispatch } from 'state'
 import {
   useGetCurrentEpoch,
-  useGetHistoryByAccount,
+  useGetCurrentHistoryPage,
+  useGetHistory,
   useGetHistoryFilter,
   useGetIsFetchingHistory,
   useIsHistoryPaneOpen,
-} from 'state/hooks'
+} from 'state/predictions/hooks'
 import { Header, HistoryTabs } from './components/History'
 import RoundsTab from './components/History/RoundsTab'
 import PnlTab from './components/History/PnlTab/PnlTab'
@@ -52,20 +52,18 @@ const History = () => {
   const isFetchingHistory = useGetIsFetchingHistory()
   const historyFilter = useGetHistoryFilter()
   const currentEpoch = useGetCurrentEpoch()
+  const currentHistoryPage = useGetCurrentHistoryPage()
   const { t } = useTranslation()
-  const bets = useGetHistoryByAccount(account)
+  const bets = useGetHistory()
   const [activeTab, setActiveTab] = useState(HistoryTabs.ROUNDS)
 
   useEffect(() => {
     if (account && isHistoryPaneOpen) {
-      dispatch(fetchHistory({ account }))
+      dispatch(fetchNodeHistory({ account }))
     }
   }, [account, currentEpoch, isHistoryPaneOpen, dispatch])
 
-  // Currently the api cannot filter by unclaimed AND won so we do it here
-  // when the user has selected Uncollected only include positions they won
-  const results = historyFilter === HistoryFilter.UNCOLLECTED ? getUnclaimedWinningBets(bets) : bets
-
+  const results = getFilteredBets(bets, historyFilter)
   const hasBetHistory = results && results.length > 0
 
   let activeTabComponent = null
@@ -83,7 +81,7 @@ const History = () => {
   if (!account) {
     activeTabComponent = (
       <Flex justifyContent="center" alignItems="center" flexDirection="column" mt="32px">
-        <UnlockButton />
+        <ConnectWalletButton />
         <Text mt="8px">{t('Connect your wallet to view your prediction history')}</Text>
       </Flex>
     )
@@ -93,7 +91,7 @@ const History = () => {
     <StyledHistory>
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
       <BetWrapper>
-        {isFetchingHistory ? (
+        {isFetchingHistory && currentHistoryPage === 1 ? (
           <SpinnerWrapper>
             <Spinner size={72} />
           </SpinnerWrapper>

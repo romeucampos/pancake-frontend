@@ -1,53 +1,58 @@
 import React, { useState } from 'react'
-import BigNumber from 'bignumber.js'
+import { formatUnits } from '@ethersproject/units'
 import { Card, CardBody, Heading, Text } from '@pancakeswap/uikit'
 import { useWeb3React } from '@web3-react/core'
 import { useTranslation } from 'contexts/Localization'
+import { fetchWalletNfts } from 'state/collectibles'
+import { useAppDispatch } from 'state'
 import useApproveConfirmTransaction from 'hooks/useApproveConfirmTransaction'
-import { DEFAULT_TOKEN_DECIMAL } from 'config'
 import { useCake, useBunnyFactory } from 'hooks/useContract'
-import { Nft } from 'config/constants/types'
-import useHasCakeBalance from 'hooks/useHasCakeBalance'
+import { Nft } from 'config/constants/nfts/types'
+import { FetchStatus, useGetCakeBalance } from 'hooks/useTokenBalance'
 import nftList from 'config/constants/nfts'
+import { useCallWithGasPrice } from 'hooks/useCallWithGasPrice'
+import ApproveConfirmButtons from 'components/ApproveConfirmButtons'
 import SelectionCard from '../components/SelectionCard'
 import NextStepButton from '../components/NextStepButton'
-import ApproveConfirmButtons from '../components/ApproveConfirmButtons'
 import useProfileCreation from './contexts/hook'
 import { MINT_COST, STARTER_BUNNY_IDENTIFIERS } from './config'
 
-const nfts = nftList.filter((nft) => STARTER_BUNNY_IDENTIFIERS.includes(nft.identifier))
-const minimumCakeBalanceToMint = new BigNumber(MINT_COST).multipliedBy(DEFAULT_TOKEN_DECIMAL)
+const nfts = nftList.pancake.filter((nft) => STARTER_BUNNY_IDENTIFIERS.includes(nft.identifier))
 
 const Mint: React.FC = () => {
-  const [variationId, setVariationId] = useState<Nft['variationId']>(null)
+  const [variationId, setVariationId] = useState<Nft['id']>(null)
   const { actions, minimumCakeRequired, allowance } = useProfileCreation()
 
   const { account } = useWeb3React()
+  const dispatch = useAppDispatch()
   const cakeContract = useCake()
   const bunnyFactoryContract = useBunnyFactory()
   const { t } = useTranslation()
-  const hasMinimumCakeRequired = useHasCakeBalance(minimumCakeBalanceToMint)
+  const { balance: cakeBalance, fetchStatus } = useGetCakeBalance()
+  const hasMinimumCakeRequired = fetchStatus === FetchStatus.SUCCESS && cakeBalance.gte(MINT_COST)
+  const { callWithGasPrice } = useCallWithGasPrice()
+
   const { isApproving, isApproved, isConfirmed, isConfirming, handleApprove, handleConfirm } =
     useApproveConfirmTransaction({
       onRequiresApproval: async () => {
         // TODO: Move this to a helper, this check will be probably be used many times
         try {
-          const response = await cakeContract.methods.allowance(account, bunnyFactoryContract.options.address).call()
-          const currentAllowance = new BigNumber(response)
-          return currentAllowance.gte(minimumCakeRequired)
+          const response = await cakeContract.allowance(account, bunnyFactoryContract.address)
+          return response.gte(minimumCakeRequired)
         } catch (error) {
           return false
         }
       },
       onApprove: () => {
-        return cakeContract.methods
-          .approve(bunnyFactoryContract.options.address, allowance.toJSON())
-          .send({ from: account })
+        return callWithGasPrice(cakeContract, 'approve', [bunnyFactoryContract.address, allowance.toString()])
       },
       onConfirm: () => {
-        return bunnyFactoryContract.methods.mintNFT(variationId).send({ from: account })
+        return callWithGasPrice(bunnyFactoryContract, 'mintNFT', [variationId])
       },
-      onSuccess: () => actions.nextStep(),
+      onSuccess: () => {
+        dispatch(fetchWalletNfts(account))
+        actions.nextStep()
+      },
     })
 
   return (
@@ -72,7 +77,7 @@ const Mint: React.FC = () => {
             {t('Choose wisely: you can only ever make one starter collectible!')}
           </Text>
           <Text as="p" mb="24px" color="textSubtle">
-            {t('Cost: %num% CAKE', { num: MINT_COST })}
+            {t('Cost: %num% CAKE', { num: formatUnits(MINT_COST) })}
           </Text>
           {nfts.map((nft) => {
             const handleChange = (value: string) => setVariationId(Number(value))
@@ -81,9 +86,9 @@ const Mint: React.FC = () => {
               <SelectionCard
                 key={nft.identifier}
                 name="mintStarter"
-                value={nft.variationId}
+                value={nft.id}
                 image={`/images/nfts/${nft.images.md}`}
-                isChecked={variationId === nft.variationId}
+                isChecked={variationId === nft.id}
                 onChange={handleChange}
                 disabled={isApproving || isConfirming || isConfirmed || !hasMinimumCakeRequired}
               >
@@ -93,7 +98,7 @@ const Mint: React.FC = () => {
           })}
           {!hasMinimumCakeRequired && (
             <Text color="failure" mb="16px">
-              {t('A minimum of %num% CAKE is required', { num: MINT_COST })}
+              {t('A minimum of %num% CAKE is required', { num: formatUnits(MINT_COST) })}
             </Text>
           )}
           <ApproveConfirmButtons

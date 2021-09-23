@@ -3,35 +3,63 @@ import {
   Text,
   Flex,
   Box,
-  Image,
   CheckmarkCircleIcon,
   FlexProps,
   HelpIcon,
   useTooltip,
   Button,
   AutoRenewIcon,
+  BunnyPlaceholderIcon,
 } from '@pancakeswap/uikit'
 import { useWeb3React } from '@web3-react/core'
+import { Token } from '@pancakeswap/sdk'
 import { Ifo, PoolIds } from 'config/constants/types'
-import { PublicIfoData, WalletIfoData } from 'hooks/ifo/types'
+import tokens from 'config/constants/tokens'
+import { PublicIfoData, WalletIfoData } from 'views/Ifos/types'
 import { useTranslation } from 'contexts/Localization'
 import { getBalanceNumber } from 'utils/formatBalance'
-import { getAddress } from 'utils/addressHelpers'
+import { TokenImage, TokenPairImage } from 'components/TokenImage'
 import { EnableStatus } from '../types'
 import PercentageOfTotal from './PercentageOfTotal'
 import { SkeletonCardTokens } from './Skeletons'
 
 interface TokenSectionProps extends FlexProps {
-  img: string
+  primaryToken?: Token
+  secondaryToken?: Token
 }
 
-const TokenSection: React.FC<TokenSectionProps> = ({ img, children, ...props }) => {
+const TokenSection: React.FC<TokenSectionProps> = ({ primaryToken, secondaryToken, children, ...props }) => {
+  const renderTokenComponent = () => {
+    if (!primaryToken) {
+      return <BunnyPlaceholderIcon width={32} mr="16px" />
+    }
+
+    if (primaryToken && secondaryToken) {
+      return (
+        <TokenPairImage
+          variant="inverted"
+          primaryToken={primaryToken}
+          height={32}
+          width={32}
+          secondaryToken={secondaryToken}
+          mr="16px"
+        />
+      )
+    }
+
+    return <TokenImage token={primaryToken} height={32} width={32} mr="16px" />
+  }
+
   return (
     <Flex {...props}>
-      <Image src={img} width={32} height={32} mr="16px" />
+      {renderTokenComponent()}
       <div>{children}</div>
     </Flex>
   )
+}
+
+const CakeBnbTokenSection: React.FC<TokenSectionProps> = (props) => {
+  return <TokenSection primaryToken={tokens.cake} secondaryToken={tokens.wbnb} {...props} />
 }
 
 const Label = (props) => <Text bold fontSize="12px" color="secondary" textTransform="uppercase" {...props} />
@@ -74,7 +102,6 @@ const IfoCardTokens: React.FC<IfoCardTokensProps> = ({
   const { currency, token } = ifo
   const { hasClaimed } = userPoolCharacteristics
   const distributionRatio = ifo[poolId].distributionRatio * 100
-  const tokenImage = `/images/tokens/${getAddress(ifo.token.address)}.png`
 
   const renderTokenSection = () => {
     if (isLoading) {
@@ -89,7 +116,7 @@ const IfoCardTokens: React.FC<IfoCardTokensProps> = ({
     if (publicIfoData.status === 'coming_soon') {
       return (
         <>
-          <TokenSection img="/images/bunny-placeholder.svg">
+          <TokenSection>
             <Label>{t('On sale')}</Label>
             <Value>{ifo[poolId].saleAmount}</Value>
           </TokenSection>
@@ -113,15 +140,15 @@ const IfoCardTokens: React.FC<IfoCardTokensProps> = ({
     if (publicIfoData.status === 'live') {
       return (
         <>
-          <TokenSection img="/images/farms/cake-bnb.svg" mb="24px">
+          <CakeBnbTokenSection mb="24px">
             <Label>{t('Your %symbol% committed', { symbol: currency.symbol })}</Label>
             <Value>{getBalanceNumber(userPoolCharacteristics.amountTokenCommittedInLP, currency.decimals)}</Value>
             <PercentageOfTotal
               userAmount={userPoolCharacteristics.amountTokenCommittedInLP}
               totalAmount={publicPoolCharacteristics.totalAmountPool}
             />
-          </TokenSection>
-          <TokenSection img={tokenImage}>
+          </CakeBnbTokenSection>
+          <TokenSection primaryToken={ifo.token}>
             <Label>{t('%symbol% to receive', { symbol: token.symbol })}</Label>
             <Value>{getBalanceNumber(userPoolCharacteristics.offeringAmountInToken, token.decimals)}</Value>
           </TokenSection>
@@ -131,12 +158,12 @@ const IfoCardTokens: React.FC<IfoCardTokensProps> = ({
     if (publicIfoData.status === 'finished') {
       return userPoolCharacteristics.amountTokenCommittedInLP.isEqualTo(0) ? (
         <Flex flexDirection="column" alignItems="center">
-          <Image src="/images/bunny-placeholder.svg" width={80} height={80} mb="16px" />
+          <BunnyPlaceholderIcon width={80} mb="16px" />
           <Text>{t('You didn’t participate in this sale!')}</Text>
         </Flex>
       ) : (
         <>
-          <TokenSection img="/images/farms/cake-bnb.svg" mb="24px">
+          <CakeBnbTokenSection mb="24px">
             <Label>
               {t(hasClaimed ? 'Your %symbol% RECLAIMED' : 'Your %symbol% TO RECLAIM', { symbol: currency.symbol })}
             </Label>
@@ -148,8 +175,8 @@ const IfoCardTokens: React.FC<IfoCardTokensProps> = ({
               userAmount={userPoolCharacteristics.amountTokenCommittedInLP}
               totalAmount={publicPoolCharacteristics.totalAmountPool}
             />
-          </TokenSection>
-          <TokenSection img={tokenImage}>
+          </CakeBnbTokenSection>
+          <TokenSection primaryToken={ifo.token}>
             <Label> {t(hasClaimed ? '%symbol% received' : '%symbol% to receive', { symbol: token.symbol })}</Label>
             <Flex alignItems="center">
               <Value>{getBalanceNumber(userPoolCharacteristics.offeringAmountInToken, token.decimals)}</Value>

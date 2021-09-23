@@ -14,16 +14,16 @@ import {
 import BigNumber from 'bignumber.js'
 import { useWeb3React } from '@web3-react/core'
 import { Ifo, IfoStatus, PoolIds } from 'config/constants/types'
-import { PublicIfoData, WalletIfoData } from 'hooks/ifo/types'
-import { useIfoApprove } from 'hooks/useApprove'
+import { PublicIfoData, WalletIfoData } from 'views/Ifos/types'
 import { useERC20 } from 'hooks/useContract'
 import useToast from 'hooks/useToast'
 import { useTranslation } from 'contexts/Localization'
-import { getAddress } from 'utils/addressHelpers'
+import { ToastDescriptionWithTx } from 'components/Toast'
 import { EnableStatus } from './types'
 import IfoPoolCard from './IfoPoolCard'
 import Timer from './Timer'
 import Achievement from './Achievement'
+import useIfoApprove from '../../hooks/useIfoApprove'
 
 interface IfoFoldableCardProps {
   ifo: Ifo
@@ -102,23 +102,25 @@ const IfoFoldableCard: React.FC<IfoFoldableCardProps> = ({ ifo, publicIfoData, w
   const [enableStatus, setEnableStatus] = useState(EnableStatus.DISABLED)
   const { t } = useTranslation()
   const { account } = useWeb3React()
-  const raisingTokenContract = useERC20(getAddress(ifo.currency.address))
+  const raisingTokenContract = useERC20(ifo.currency.address)
   const Ribbon = getRibbonComponent(ifo, publicIfoData.status, t)
   const isActive = publicIfoData.status !== 'finished' && ifo.isActive
   const { contract } = walletIfoData
-  const onApprove = useIfoApprove(raisingTokenContract, contract.options.address)
+  const onApprove = useIfoApprove(raisingTokenContract, contract.address)
   const { toastSuccess } = useToast()
 
   const handleApprove = async () => {
     try {
       setEnableStatus(EnableStatus.IS_ENABLING)
 
-      await onApprove()
+      const receipt = await onApprove()
 
       setEnableStatus(EnableStatus.ENABLED)
       toastSuccess(
         t('Successfully Enabled!'),
-        t('You can now participate in the %symbol% IFO.', { symbol: ifo.token.symbol }),
+        <ToastDescriptionWithTx txHash={receipt.transactionHash}>
+          {t('You can now participate in the %symbol% IFO.', { symbol: ifo.token.symbol })}
+        </ToastDescriptionWithTx>,
       )
     } catch (error) {
       setEnableStatus(EnableStatus.DISABLED)
@@ -128,8 +130,8 @@ const IfoFoldableCard: React.FC<IfoFoldableCardProps> = ({ ifo, publicIfoData, w
   useEffect(() => {
     const checkAllowance = async () => {
       try {
-        const response = await raisingTokenContract.methods.allowance(account, contract.options.address).call()
-        const currentAllowance = new BigNumber(response)
+        const response = await raisingTokenContract.allowance(account, contract.address)
+        const currentAllowance = new BigNumber(response.toString())
         setEnableStatus(currentAllowance.lte(0) ? EnableStatus.DISABLED : EnableStatus.ENABLED)
       } catch (error) {
         setEnableStatus(EnableStatus.DISABLED)

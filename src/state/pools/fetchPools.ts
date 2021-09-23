@@ -4,9 +4,10 @@ import sousChefABI from 'config/abi/sousChef.json'
 import cakeABI from 'config/abi/cake.json'
 import wbnbABI from 'config/abi/weth.json'
 import multicall from 'utils/multicall'
-import { getAddress, getWbnbAddress } from 'utils/addressHelpers'
+import { getAddress } from 'utils/addressHelpers'
 import { BIG_ZERO } from 'utils/bigNumber'
 import { getSouschefV2Contract } from 'utils/contractHelpers'
+import tokens from 'config/constants/tokens'
 
 export const fetchPoolsBlockLimits = async () => {
   const poolsWithEnd = poolsConfig.filter((p) => p.sousId !== 0)
@@ -43,7 +44,7 @@ export const fetchPoolsTotalStaking = async () => {
 
   const callsNonBnbPools = nonBnbPools.map((poolConfig) => {
     return {
-      address: getAddress(poolConfig.stakingToken.address),
+      address: poolConfig.stakingToken.address,
       name: 'balanceOf',
       params: [getAddress(poolConfig.contractAddress)],
     }
@@ -51,7 +52,7 @@ export const fetchPoolsTotalStaking = async () => {
 
   const callsBnbPools = bnbPool.map((poolConfig) => {
     return {
-      address: getWbnbAddress(),
+      address: tokens.wbnb.address,
       name: 'balanceOf',
       params: [getAddress(poolConfig.contractAddress)],
     }
@@ -75,8 +76,8 @@ export const fetchPoolsTotalStaking = async () => {
 export const fetchPoolStakingLimit = async (sousId: number): Promise<BigNumber> => {
   try {
     const sousContract = getSouschefV2Contract(sousId)
-    const stakingLimit = await sousContract.methods.poolLimitPerUser().call()
-    return new BigNumber(stakingLimit)
+    const stakingLimit = await sousContract.poolLimitPerUser()
+    return new BigNumber(stakingLimit.toString())
   } catch (error) {
     return BIG_ZERO
   }

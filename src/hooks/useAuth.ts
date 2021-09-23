@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useWeb3React, UnsupportedChainIdError } from '@web3-react/core'
+import { UnsupportedChainIdError, useWeb3React } from '@web3-react/core'
 import { NoBscProviderError } from '@binance-chain/bsc-connector'
 import {
   NoEthereumProviderError,
@@ -16,11 +16,12 @@ import useToast from 'hooks/useToast'
 import { profileClear } from 'state/profile'
 import { useAppDispatch } from 'state'
 import { useTranslation } from 'contexts/Localization'
+import { clearAllTransactions } from 'state/transactions/actions'
 
 const useAuth = () => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
-  const { activate, deactivate } = useWeb3React()
+  const { chainId, activate, deactivate } = useWeb3React()
   const { toastError } = useToast()
 
   const login = useCallback(
@@ -66,7 +67,11 @@ const useAuth = () => {
       connectorsByName.walletconnect.close()
       connectorsByName.walletconnect.walletConnectProvider = null
     }
-  }, [deactivate, dispatch])
+    window.localStorage.removeItem(connectorLocalStorageKey)
+    if (chainId) {
+      dispatch(clearAllTransactions({ chainId }))
+    }
+  }, [deactivate, dispatch, chainId])
 
   return { login, logout }
 }

@@ -13,21 +13,24 @@ import {
   TimerIcon,
   useTooltip,
 } from '@pancakeswap/uikit'
-import { BASE_BSC_SCAN_URL, BASE_URL } from 'config'
-import { getBscScanBlockCountdownUrl } from 'utils/bscscan'
-import { useBlock, useCakeVault } from 'state/hooks'
+import { BASE_BSC_SCAN_URL } from 'config'
+import { getBscScanLink } from 'utils'
+import { useBlock } from 'state/block/hooks'
+import { useCakeVault } from 'state/pools/hooks'
 import BigNumber from 'bignumber.js'
-import { Pool } from 'state/types'
+import { DeserializedPool } from 'state/types'
 import { useTranslation } from 'contexts/Localization'
 import Balance from 'components/Balance'
 import { CompoundingPoolTag, ManualPoolTag } from 'components/Tags'
 import { getAddress, getCakeVaultAddress } from 'utils/addressHelpers'
+import { BIG_ZERO } from 'utils/bigNumber'
 import { registerToken } from 'utils/wallet'
 import { getBalanceNumber, getFullDisplayBalance } from 'utils/formatBalance'
-import { getPoolBlockInfo } from 'views/Pools/helpers'
+import { convertSharesToCake, getPoolBlockInfo } from 'views/Pools/helpers'
 import Harvest from './Harvest'
 import Stake from './Stake'
 import Apr from '../Apr'
+import AutoHarvest from './AutoHarvest'
 
 const expandAnimation = keyframes`
   from {
@@ -87,11 +90,12 @@ type MediaBreakpoints = {
   isMd: boolean
   isLg: boolean
   isXl: boolean
+  isXxl: boolean
 }
 
 interface ActionPanelProps {
   account: string
-  pool: Pool
+  pool: DeserializedPool
   userDataLoaded: boolean
   expanded: boolean
   breakpoints: MediaBreakpoints
@@ -118,6 +122,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ account, pool, userDataLoaded
     endBlock,
     stakingLimit,
     contractAddress,
+    userData,
     isAutoVault,
   } = pool
   const { t } = useTranslation()
@@ -130,14 +135,22 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ account, pool, userDataLoaded
   const { shouldShowBlockCountdown, blocksUntilStart, blocksRemaining, hasPoolStarted, blocksToDisplay } =
     getPoolBlockInfo(pool, currentBlock)
 
-  const isMetaMaskInScope = !!(window as WindowChain).ethereum?.isMetaMask
-  const tokenAddress = earningToken.address ? getAddress(earningToken.address) : ''
-  const imageSrc = `${BASE_URL}/images/tokens/${tokenAddress}.png`
+  const isMetaMaskInScope = !!window.ethereum?.isMetaMask
+  const tokenAddress = earningToken.address || ''
 
   const {
     totalCakeInVault,
+    userData: { userShares },
     fees: { performanceFee },
+    pricePerFullShare,
   } = useCakeVault()
+
+  const stakingTokenBalance = userData?.stakingTokenBalance ? new BigNumber(userData.stakingTokenBalance) : BIG_ZERO
+  const stakedBalance = userData?.stakedBalance ? new BigNumber(userData.stakedBalance) : BIG_ZERO
+  const { cakeAsBigNumber } = convertSharesToCake(userShares, pricePerFullShare)
+  const poolStakingTokenBalance = isAutoVault
+    ? cakeAsBigNumber.plus(stakingTokenBalance)
+    : stakedBalance.plus(stakingTokenBalance)
 
   const performanceFeeAsDecimal = performanceFee && performanceFee / 100
   const isManualCakePool = sousId === 0
@@ -186,7 +199,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ account, pool, userDataLoaded
       <Flex mb="8px" justifyContent="space-between">
         <Text>{hasPoolStarted ? t('Ends in') : t('Starts in')}:</Text>
         <Flex>
-          <Link external href={getBscScanBlockCountdownUrl(hasPoolStarted ? endBlock : startBlock)}>
+          <Link external href={getBscScanLink(hasPoolStarted ? endBlock : startBlock, 'countdown')}>
             <Balance fontSize="16px" value={blocksToDisplay} decimals={0} color="primary" />
             <Text ml="4px" color="primary" textTransform="lowercase">
               {t('Blocks')}
@@ -202,7 +215,12 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ account, pool, userDataLoaded
   const aprRow = (
     <Flex justifyContent="space-between" alignItems="center" mb="8px">
       <Text>{isAutoVault ? t('APY') : t('APR')}:</Text>
-      <Apr pool={pool} showIcon performanceFee={isAutoVault ? performanceFeeAsDecimal : 0} />
+      <Apr
+        pool={pool}
+        showIcon
+        stakedBalance={poolStakingTokenBalance}
+        performanceFee={isAutoVault ? performanceFeeAsDecimal : 0}
+      />
     </Flex>
   )
 
@@ -233,8 +251,8 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ account, pool, userDataLoaded
         {(isXs || isSm || isMd) && totalStakedRow}
         {shouldShowBlockCountdown && blocksRow}
         <Flex mb="8px" justifyContent={['flex-end', 'flex-end', 'flex-start']}>
-          <LinkExternal href={`https://pancakeswap.info/token/${getAddress(earningToken.address)}`} bold={false}>
-            {t('Info site')}
+          <LinkExternal href={`/info/token/${earningToken.address}`} bold={false}>
+            {t('See Token Info')}
           </LinkExternal>
         </Flex>
         <Flex mb="8px" justifyContent={['flex-end', 'flex-end', 'flex-start']}>
@@ -258,7 +276,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ account, pool, userDataLoaded
               variant="text"
               p="0"
               height="auto"
-              onClick={() => registerToken(tokenAddress, earningToken.symbol, earningToken.decimals, imageSrc)}
+              onClick={() => registerToken(tokenAddress, earningToken.symbol, earningToken.decimals)}
             >
               <Text color="primary">{t('Add to Metamask')}</Text>
               <MetamaskIcon ml="4px" />
@@ -277,7 +295,11 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ account, pool, userDataLoaded
             {isAutoVault ? t('Automatic restaking') : `${t('Earn')} CAKE ${t('Stake').toLocaleLowerCase()} CAKE`}
           </Text>
         )}
-        <Harvest {...pool} userDataLoaded={userDataLoaded} />
+        {pool.isAutoVault ? (
+          <AutoHarvest {...pool} userDataLoaded={userDataLoaded} />
+        ) : (
+          <Harvest {...pool} userDataLoaded={userDataLoaded} />
+        )}
         <Stake pool={pool} userDataLoaded={userDataLoaded} />
       </ActionContainer>
     </StyledActionPanel>

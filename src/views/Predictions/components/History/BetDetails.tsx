@@ -2,12 +2,12 @@ import React from 'react'
 import styled from 'styled-components'
 import { Bet } from 'state/types'
 import { useTranslation } from 'contexts/Localization'
-import { getBscScanBlockNumberUrl } from 'utils/bscscan'
+import { getBscScanLink } from 'utils'
 import { Flex, Text, Link, Heading } from '@pancakeswap/uikit'
 import { Result } from 'state/predictions/helpers'
-import { getMultiplier } from '../../helpers'
-import { PayoutRow, RoundResult } from '../RoundResult'
+import { PayoutRow, RoundResultHistory } from '../RoundResult'
 import BetResult from './BetResult'
+import { getMultiplier } from './helpers'
 
 interface BetDetailsProps {
   bet: Bet
@@ -37,22 +37,26 @@ const BetDetails: React.FC<BetDetailsProps> = ({ bet, result }) => {
       )}
       {result !== Result.LIVE && <BetResult bet={bet} result={result} />}
       <Heading mb="8px">{t('Round History')}</Heading>
-      <RoundResult round={bet.round} mb="24px">
+      <RoundResultHistory round={bet.round} mb="24px">
         <PayoutRow positionLabel={t('Up')} multiplier={bullMultiplier} amount={bullAmount} />
         <PayoutRow positionLabel={t('Down')} multiplier={bearMultiplier} amount={bearAmount} />
-      </RoundResult>
-      <Flex alignItems="center" justifyContent="space-between" mb="8px">
-        <Text>{t('Opening Block')}</Text>
-        <Link href={getBscScanBlockNumberUrl(bet.round.lockBlock)} external>
-          {bet.round.lockBlock}
-        </Link>
-      </Flex>
-      <Flex alignItems="center" justifyContent="space-between">
-        <Text>{t('Closing Block')}</Text>
-        <Link href={getBscScanBlockNumberUrl(bet.round.endBlock)} external>
-          {bet.round.endBlock}
-        </Link>
-      </Flex>
+      </RoundResultHistory>
+      {bet.round.lockBlock && (
+        <Flex alignItems="center" justifyContent="space-between" mb="8px">
+          <Text>{t('Opening Block')}</Text>
+          <Link href={getBscScanLink(bet.round.lockBlock, 'block')} external>
+            {bet.round.lockBlock}
+          </Link>
+        </Flex>
+      )}
+      {bet.round.closeBlock && (
+        <Flex alignItems="center" justifyContent="space-between">
+          <Text>{t('Closing Block')}</Text>
+          <Link href={getBscScanLink(bet.round.closeBlock, 'block')} external>
+            {bet.round.closeBlock}
+          </Link>
+        </Flex>
+      )}
     </StyledBetDetails>
   )
 }

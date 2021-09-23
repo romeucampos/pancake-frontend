@@ -1,38 +1,29 @@
 import { useEffect, useReducer, useRef } from 'react'
 import { noop } from 'lodash'
 import { useWeb3React } from '@web3-react/core'
+import { ethers } from 'ethers'
 import useToast from 'hooks/useToast'
 import { useTranslation } from 'contexts/Localization'
-
-type Web3Payload = Record<string, unknown> | null
 
 type LoadingState = 'idle' | 'loading' | 'success' | 'fail'
 
 type Action =
   | { type: 'requires_approval' }
   | { type: 'approve_sending' }
-  | { type: 'approve_receipt'; payload: Web3Payload }
-  | { type: 'approve_error'; payload: Web3Payload }
+  | { type: 'approve_receipt' }
+  | { type: 'approve_error' }
   | { type: 'confirm_sending' }
-  | { type: 'confirm_receipt'; payload: Web3Payload }
-  | { type: 'confirm_error'; payload: Web3Payload }
+  | { type: 'confirm_receipt' }
+  | { type: 'confirm_error' }
 
 interface State {
   approvalState: LoadingState
-  approvalReceipt: Web3Payload
-  approvalError: Web3Payload
   confirmState: LoadingState
-  confirmReceipt: Web3Payload
-  confirmError: Web3Payload
 }
 
 const initialState: State = {
   approvalState: 'idle',
-  approvalReceipt: null,
-  approvalError: null,
   confirmState: 'idle',
-  confirmReceipt: null,
-  confirmError: null,
 }
 
 const reducer = (state: State, actions: Action): State => {
@@ -51,13 +42,11 @@ const reducer = (state: State, actions: Action): State => {
       return {
         ...state,
         approvalState: 'success',
-        approvalReceipt: actions.payload,
       }
     case 'approve_error':
       return {
         ...state,
         approvalState: 'fail',
-        approvalError: actions.payload,
       }
     case 'confirm_sending':
       return {
@@ -68,27 +57,28 @@ const reducer = (state: State, actions: Action): State => {
       return {
         ...state,
         confirmState: 'success',
-        confirmReceipt: actions.payload,
       }
     case 'confirm_error':
       return {
         ...state,
         confirmState: 'fail',
-        confirmError: actions.payload,
       }
     default:
       return state
   }
 }
 
-type ContractHandler = () => any
+interface OnSuccessProps {
+  state: State
+  receipt: ethers.providers.TransactionReceipt
+}
 
 interface ApproveConfirmTransaction {
-  onApprove: ContractHandler
-  onConfirm: ContractHandler
+  onApprove: () => Promise<ethers.providers.TransactionResponse>
+  onConfirm: () => Promise<ethers.providers.TransactionResponse>
   onRequiresApproval?: () => Promise<boolean>
-  onSuccess: (state: State) => void
-  onApproveSuccess?: (state: State) => void
+  onSuccess: ({ state, receipt }: OnSuccessProps) => void
+  onApproveSuccess?: ({ state, receipt }: OnSuccessProps) => void
 }
 
 const useApproveConfirmTransaction = ({
@@ -120,39 +110,33 @@ const useApproveConfirmTransaction = ({
     isApproved: state.approvalState === 'success',
     isConfirming: state.confirmState === 'loading',
     isConfirmed: state.confirmState === 'success',
-    approvalReceipt: state.approvalReceipt,
-    approvalError: state.approvalError,
-    confirmReceipt: state.confirmReceipt,
-    confirmError: state.confirmError,
-    handleApprove: () => {
-      onApprove()
-        .on('sending', () => {
-          dispatch({ type: 'approve_sending' })
-        })
-        .on('receipt', (payload: Web3Payload) => {
-          dispatch({ type: 'approve_receipt', payload })
-          onApproveSuccess(state)
-        })
-        .on('error', (error: Web3Payload) => {
-          dispatch({ type: 'approve_error', payload: error })
-          console.error('An error occurred approving transaction:', error)
-          toastError(t('An error occurred approving transaction'))
-        })
+    handleApprove: async () => {
+      try {
+        const tx = await onApprove()
+        dispatch({ type: 'approve_sending' })
+        const receipt = await tx.wait()
+        if (receipt.status) {
+          dispatch({ type: 'approve_receipt' })
+          onApproveSuccess({ state, receipt })
+        }
+      } catch (error) {
+        dispatch({ type: 'approve_error' })
+        toastError(t('Error'), t('Please try again. Confirm the transaction and make sure you are paying enough gas!'))
+      }
     },
-    handleConfirm: () => {
-      onConfirm()
-        .on('sending', () => {
-          dispatch({ type: 'confirm_sending' })
-        })
-        .on('receipt', (payload: Web3Payload) => {
-          dispatch({ type: 'confirm_receipt', payload })
-          onSuccess(state)
-        })
-        .on('error', (error: Web3Payload) => {
-          dispatch({ type: 'confirm_error', payload: error })
-          console.error('An error occurred confirming transaction:', error)
-          toastError(t('An error occurred confirming transaction'))
-        })
+    handleConfirm: async () => {
+      dispatch({ type: 'confirm_sending' })
+      try {
+        const tx = await onConfirm()
+        const receipt = await tx.wait()
+        if (receipt.status) {
+          dispatch({ type: 'confirm_receipt' })
+          onSuccess({ state, receipt })
+        }
+      } catch (error) {
+        dispatch({ type: 'confirm_error' })
+        toastError(t('Error'), t('Please try again. Confirm the transaction and make sure you are paying enough gas!'))
+      }
     },
   }
 }

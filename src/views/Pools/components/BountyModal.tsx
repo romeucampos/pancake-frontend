@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import BigNumber from 'bignumber.js'
 import { useWeb3React } from '@web3-react/core'
-import { DEFAULT_GAS_LIMIT } from 'config'
 import styled from 'styled-components'
 import { Modal, Text, Flex, Button, HelpIcon, AutoRenewIcon, useTooltip } from '@pancakeswap/uikit'
 import { getBalanceNumber } from 'utils/formatBalance'
@@ -9,9 +8,12 @@ import { useCakeVaultContract } from 'hooks/useContract'
 import useTheme from 'hooks/useTheme'
 import useToast from 'hooks/useToast'
 import { useTranslation } from 'contexts/Localization'
-import UnlockButton from 'components/UnlockButton'
+import ConnectWalletButton from 'components/ConnectWalletButton'
+import { ToastDescriptionWithTx } from 'components/Toast'
 import Balance from 'components/Balance'
-import { useCakeVault, usePriceCakeBusd } from 'state/hooks'
+import { usePriceCakeBusd } from 'state/farms/hooks'
+import { useCakeVault } from 'state/pools/hooks'
+import { useCallWithGasPrice } from 'hooks/useCallWithGasPrice'
 
 interface BountyModalProps {
   onDismiss?: () => void
@@ -37,6 +39,7 @@ const BountyModal: React.FC<BountyModalProps> = ({ onDismiss, TooltipComponent }
     totalPendingCakeHarvest,
     fees: { callFee },
   } = useCakeVault()
+  const { callWithGasPrice } = useCallWithGasPrice()
   const cakePriceBusd = usePriceCakeBusd()
   const callFeeAsDecimal = callFee / 100
   const totalYieldToDisplay = getBalanceNumber(totalPendingCakeHarvest, 18)
@@ -56,26 +59,24 @@ const BountyModal: React.FC<BountyModalProps> = ({ onDismiss, TooltipComponent }
   })
 
   const handleConfirmClick = async () => {
-    cakeVaultContract.methods
-      .harvest()
-      .send({ from: account, gas: DEFAULT_GAS_LIMIT })
-      .on('sending', () => {
-        setPendingTx(true)
-      })
-      .on('receipt', () => {
-        toastSuccess(t('Bounty collected!'), t('CAKE bounty has been sent to your wallet.'))
-        setPendingTx(false)
-        onDismiss()
-      })
-      .on('error', (error) => {
-        console.error(error)
-        toastError(
-          t('Could not be collected'),
-          t('There may be an issue with your transaction, or another user claimed the bounty first.'),
+    setPendingTx(true)
+    try {
+      const tx = await callWithGasPrice(cakeVaultContract, 'harvest', undefined, { gasLimit: 300000 })
+      const receipt = await tx.wait()
+      if (receipt.status) {
+        toastSuccess(
+          t('Bounty collected!'),
+          <ToastDescriptionWithTx txHash={receipt.transactionHash}>
+            {t('CAKE bounty has been sent to your wallet.')}
+          </ToastDescriptionWithTx>,
         )
         setPendingTx(false)
         onDismiss()
-      })
+      }
+    } catch (error) {
+      toastError(t('Error'), t('Please try again. Confirm the transaction and make sure you are paying enough gas!'))
+      setPendingTx(false)
+    }
   }
 
   return (
@@ -119,11 +120,12 @@ const BountyModal: React.FC<BountyModalProps> = ({ onDismiss, TooltipComponent }
           endIcon={pendingTx ? <AutoRenewIcon spin color="currentColor" /> : null}
           onClick={handleConfirmClick}
           mb="28px"
+          id="autoCakeConfirmBounty"
         >
           {pendingTx ? t('Confirming') : t('Confirm')}
         </Button>
       ) : (
-        <UnlockButton mb="28px" />
+        <ConnectWalletButton mb="28px" />
       )}
       <Flex justifyContent="center" alignItems="center">
         <Text fontSize="16px" bold color="textSubtle" mr="4px">

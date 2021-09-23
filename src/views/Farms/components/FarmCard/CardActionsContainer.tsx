@@ -5,18 +5,18 @@ import { Button, Flex, Text } from '@pancakeswap/uikit'
 import { getAddress } from 'utils/addressHelpers'
 import { useAppDispatch } from 'state'
 import { fetchFarmUserDataAsync } from 'state/farms'
-import { Farm } from 'state/types'
+import { DeserializedFarm } from 'state/types'
 import { useTranslation } from 'contexts/Localization'
 import { useERC20 } from 'hooks/useContract'
-import { useApprove } from 'hooks/useApprove'
-import UnlockButton from 'components/UnlockButton'
+import ConnectWalletButton from 'components/ConnectWalletButton'
 import StakeAction from './StakeAction'
 import HarvestAction from './HarvestAction'
+import useApproveFarm from '../../hooks/useApproveFarm'
 
 const Action = styled.div`
   padding-top: 16px;
 `
-export interface FarmWithStakedValue extends Farm {
+export interface FarmWithStakedValue extends DeserializedFarm {
   apr?: number
 }
 
@@ -24,29 +24,22 @@ interface FarmCardActionsProps {
   farm: FarmWithStakedValue
   account?: string
   addLiquidityUrl?: string
+  cakePrice?: BigNumber
+  lpLabel?: string
 }
 
-const CardActions: React.FC<FarmCardActionsProps> = ({ farm, account, addLiquidityUrl }) => {
+const CardActions: React.FC<FarmCardActionsProps> = ({ farm, account, addLiquidityUrl, cakePrice, lpLabel }) => {
   const { t } = useTranslation()
   const [requestedApproval, setRequestedApproval] = useState(false)
   const { pid, lpAddresses } = farm
-  const {
-    allowance: allowanceAsString = 0,
-    tokenBalance: tokenBalanceAsString = 0,
-    stakedBalance: stakedBalanceAsString = 0,
-    earnings: earningsAsString = 0,
-  } = farm.userData || {}
-  const allowance = new BigNumber(allowanceAsString)
-  const tokenBalance = new BigNumber(tokenBalanceAsString)
-  const stakedBalance = new BigNumber(stakedBalanceAsString)
-  const earnings = new BigNumber(earningsAsString)
+  const { allowance, tokenBalance, stakedBalance, earnings } = farm.userData || {}
   const lpAddress = getAddress(lpAddresses)
   const isApproved = account && allowance && allowance.isGreaterThan(0)
   const dispatch = useAppDispatch()
 
   const lpContract = useERC20(lpAddress)
 
-  const { onApprove } = useApprove(lpContract)
+  const { onApprove } = useApproveFarm(lpContract)
 
   const handleApprove = useCallback(async () => {
     try {
@@ -66,11 +59,14 @@ const CardActions: React.FC<FarmCardActionsProps> = ({ farm, account, addLiquidi
         tokenBalance={tokenBalance}
         tokenName={farm.lpSymbol}
         pid={pid}
+        apr={farm.apr}
+        lpLabel={lpLabel}
+        cakePrice={cakePrice}
         addLiquidityUrl={addLiquidityUrl}
       />
     ) : (
       <Button mt="8px" width="100%" disabled={requestedApproval} onClick={handleApprove}>
-        {t('Approve Contract')}
+        {t('Enable Contract')}
       </Button>
     )
   }
@@ -94,7 +90,7 @@ const CardActions: React.FC<FarmCardActionsProps> = ({ farm, account, addLiquidi
           {t('Staked')}
         </Text>
       </Flex>
-      {!account ? <UnlockButton mt="8px" width="100%" /> : renderApprovalOrStakeButton()}
+      {!account ? <ConnectWalletButton mt="8px" width="100%" /> : renderApprovalOrStakeButton()}
     </Action>
   )
 }

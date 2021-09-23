@@ -2,17 +2,18 @@ import React, { useRef } from 'react'
 import styled from 'styled-components'
 import { Button, ChevronUpIcon } from '@pancakeswap/uikit'
 import { useTranslation } from 'contexts/Localization'
-import { Pool } from 'state/types'
+import { DeserializedPool } from 'state/types'
 import PoolRow from './PoolRow'
 
 interface PoolsTableProps {
-  pools: Pool[]
+  pools: DeserializedPool[]
   userDataLoaded: boolean
   account: string
 }
 
 const StyledTable = styled.div`
   border-radius: ${({ theme }) => theme.radii.card};
+  scroll-margin-top: 64px;
 
   background-color: ${({ theme }) => theme.card.background};
   > div:not(:last-child) {
@@ -44,7 +45,7 @@ const PoolsTable: React.FC<PoolsTableProps> = ({ pools, userDataLoaded, account 
   }
   return (
     <StyledTableBorder>
-      <StyledTable role="table" ref={tableWrapperEl}>
+      <StyledTable id="pools-table" role="table" ref={tableWrapperEl}>
         {pools.map((pool) => (
           <PoolRow
             key={pool.isAutoVault ? 'auto-cake' : pool.sousId}

@@ -1,10 +1,10 @@
 import React from 'react'
-import { useWeb3React } from '@web3-react/core'
 import { AutoRenewIcon, Button } from '@pancakeswap/uikit'
 import { PoolIds } from 'config/constants/types'
-import { WalletIfoData } from 'hooks/ifo/types'
+import { WalletIfoData } from 'views/Ifos/types'
 import { useTranslation } from 'contexts/Localization'
 import useToast from 'hooks/useToast'
+import { ToastDescriptionWithTx } from 'components/Toast'
 
 interface Props {
   poolId: PoolIds
@@ -15,25 +15,34 @@ interface Props {
 const ClaimButton: React.FC<Props> = ({ poolId, ifoVersion, walletIfoData }) => {
   const userPoolCharacteristics = walletIfoData[poolId]
   const { t } = useTranslation()
-  const { account } = useWeb3React()
   const { toastError, toastSuccess } = useToast()
 
   const setPendingTx = (isPending: boolean) => walletIfoData.setPendingTx(isPending, poolId)
 
   const handleClaim = async () => {
     try {
+      let txHash
       setPendingTx(true)
 
       if (ifoVersion === 1) {
-        await walletIfoData.contract.methods.harvest().send({ from: account })
+        const tx = await walletIfoData.contract.harvest()
+        const receipt = await tx.wait()
+        txHash = receipt.transactionHash
       } else {
-        await walletIfoData.contract.methods.harvestPool(poolId === PoolIds.poolBasic ? 0 : 1).send({ from: account })
+        const tx = await walletIfoData.contract.harvestPool(poolId === PoolIds.poolBasic ? 0 : 1)
+        const receipt = await tx.wait()
+        txHash = receipt.transactionHash
       }
 
       walletIfoData.setIsClaimed(poolId)
-      toastSuccess(t('Success!'), t('You have successfully claimed your rewards.'))
+      toastSuccess(
+        t('Success!'),
+        <ToastDescriptionWithTx txHash={txHash}>
+          {t('You have successfully claimed your rewards.')}
+        </ToastDescriptionWithTx>,
+      )
     } catch (error) {
-      toastError(t('Error'), error?.message)
+      toastError(t('Error'), t('Please try again. Confirm the transaction and make sure you are paying enough gas!'))
       console.error(error)
     } finally {
       setPendingTx(false)

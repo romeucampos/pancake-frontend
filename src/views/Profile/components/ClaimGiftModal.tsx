@@ -5,6 +5,8 @@ import useToast from 'hooks/useToast'
 import { useClaimRefundContract } from 'hooks/useContract'
 import { useTranslation } from 'contexts/Localization'
 import { getClaimRefundContract } from 'utils/contractHelpers'
+import { useCallWithGasPrice } from 'hooks/useCallWithGasPrice'
+import { ToastDescriptionWithTx } from 'components/Toast'
 
 interface ClaimGiftProps extends InjectedModalProps {
   onSuccess: () => void
@@ -22,8 +24,12 @@ export const useCanClaim = () => {
   useEffect(() => {
     const fetchClaimStatus = async () => {
       const claimRefundContract = getClaimRefundContract()
-      const walletCanClaim = await claimRefundContract.methods.canClaim(account).call()
-      setCanClaim(walletCanClaim)
+      try {
+        const walletCanClaim = await claimRefundContract.canClaim(account)
+        setCanClaim(walletCanClaim)
+      } catch (e) {
+        console.error(e)
+      }
     }
 
     if (account) {
@@ -36,28 +42,24 @@ export const useCanClaim = () => {
 
 const ClaimGift: React.FC<ClaimGiftProps> = ({ onSuccess, onDismiss }) => {
   const [isConfirming, setIsConfirming] = useState(false)
-  const { account } = useWeb3React()
   const { t } = useTranslation()
   const { canClaim } = useCanClaim()
   const claimRefundContract = useClaimRefundContract()
   const { toastSuccess, toastError } = useToast()
+  const { callWithGasPrice } = useCallWithGasPrice()
 
-  const handleClick = () => {
-    claimRefundContract.methods
-      .getCakeBack()
-      .send({ from: account })
-      .on('sending', () => {
-        setIsConfirming(true)
-      })
-      .on('receipt', () => {
-        toastSuccess(t('Success!'))
-        onSuccess()
-        onDismiss()
-      })
-      .on('error', (error) => {
-        setIsConfirming(false)
-        toastError(t('Error'), error?.message)
-      })
+  const handleClick = async () => {
+    const tx = await callWithGasPrice(claimRefundContract, 'getCakeBack')
+    setIsConfirming(true)
+    const receipt = await tx.wait()
+    if (receipt.status) {
+      toastSuccess(t('Success!'), <ToastDescriptionWithTx txHash={receipt.transactionHash} />)
+      onSuccess()
+      onDismiss()
+    } else {
+      setIsConfirming(false)
+      toastError(t('Error'), t('Please try again. Confirm the transaction and make sure you are paying enough gas!'))
+    }
   }
 
   return (

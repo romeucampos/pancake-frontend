@@ -2,7 +2,7 @@ import React from 'react'
 import { useTranslation } from 'contexts/Localization'
 import { Route, useRouteMatch, Link } from 'react-router-dom'
 import { ButtonMenu, ButtonMenuItem, Flex } from '@pancakeswap/uikit'
-import Container from 'components/layout/Container'
+import Container from 'components/Layout/Container'
 import Hero from './components/Hero'
 import CurrentIfo from './CurrentIfo'
 import PastIfo from './PastIfo'
@@ -20,7 +20,7 @@ const Ifos = () => {
             <ButtonMenuItem as={Link} to={`${url}`}>
               {t('Next IFO')}
             </ButtonMenuItem>
-            <ButtonMenuItem as={Link} to={`${url}/history`}>
+            <ButtonMenuItem id="past-ifos-button" as={Link} to={`${url}/history`}>
               {t('Past IFOs')}
             </ButtonMenuItem>
           </ButtonMenu>

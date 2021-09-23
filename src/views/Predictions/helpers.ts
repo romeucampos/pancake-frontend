@@ -1,23 +1,41 @@
-import BigNumber from 'bignumber.js'
-import { Bet, BetPosition } from 'state/types'
-import { DefaultTheme } from 'styled-components'
-import { formatNumber, getBalanceAmount } from 'utils/formatBalance'
+import { BigNumber, ethers } from 'ethers'
+import { BetPosition, NodeRound } from 'state/types'
+import { formatBigNumberToFixed } from 'utils/formatBalance'
 import getTimePeriods from 'utils/getTimePeriods'
 
-export const getBnbAmount = (bnbBn: BigNumber) => {
-  return getBalanceAmount(bnbBn, 18)
+const MIN_PRICE_USD_DISPLAYED = BigNumber.from(100000)
+const MIN_PRICE_BNB_DISPLAYED = BigNumber.from('1000000000000000')
+const DISPLAYED_DECIMALS = 3
+
+type formatPriceDifferenceProps = {
+  price?: BigNumber
+  minPriceDisplayed: BigNumber
+  unitPrefix: string
+  decimals: number
 }
 
-export const formatUsd = (usd: number) => {
-  return `$${formatNumber(usd || 0, 3, 3)}`
+const formatPriceDifference = ({
+  price = BigNumber.from(0),
+  minPriceDisplayed,
+  unitPrefix,
+  decimals,
+}: formatPriceDifferenceProps) => {
+  const sign = price.isNegative() ? BigNumber.from(-1) : BigNumber.from(1)
+
+  if (price.abs().lt(minPriceDisplayed)) {
+    const signedPriceToFormat = minPriceDisplayed.mul(sign)
+    return `<${unitPrefix}${formatBigNumberToFixed(signedPriceToFormat, DISPLAYED_DECIMALS, decimals)}`
+  }
+
+  return `${unitPrefix}${formatBigNumberToFixed(price, DISPLAYED_DECIMALS, decimals)}`
 }
 
-export const formatBnb = (bnb: number) => {
-  return bnb ? bnb.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '0'
+export const formatUsdv2 = (usd: BigNumber) => {
+  return formatPriceDifference({ price: usd, minPriceDisplayed: MIN_PRICE_USD_DISPLAYED, unitPrefix: '$', decimals: 8 })
 }
 
-export const formatBnbFromBigNumber = (bnbBn: BigNumber) => {
-  return formatBnb(getBnbAmount(bnbBn).toNumber())
+export const formatBnbv2 = (bnb: BigNumber) => {
+  return formatPriceDifference({ price: bnb, minPriceDisplayed: MIN_PRICE_BNB_DISPLAYED, unitPrefix: '', decimals: 18 })
 }
 
 export const padTime = (num: number) => num.toString().padStart(2, '0')
@@ -33,32 +51,48 @@ export const formatRoundTime = (secondsBetweenBlocks: number) => {
   return minutesSeconds
 }
 
-export const getMultiplier = (total: number, amount: number) => {
-  if (total === 0 || amount === 0) {
-    return 0
+export const getHasRoundFailed = (round: NodeRound, buffer: number) => {
+  const closeTimestampMs = (round.closeTimestamp + buffer) * 1000
+  const now = Date.now()
+
+  if (closeTimestampMs !== null && now > closeTimestampMs && !round.oracleCalled) {
+    return true
   }
 
-  return total / amount
+  return false
 }
 
-/**
- * Calculates the total payout given a bet
- */
-export const getPayout = (bet: Bet) => {
-  if (!bet || !bet.round) {
-    return 0
+export const getMultiplierV2 = (total: ethers.BigNumber, amount: ethers.BigNumber) => {
+  if (!total) {
+    return ethers.FixedNumber.from(0)
   }
 
-  const { bullAmount, bearAmount, totalAmount } = bet.round
-  const multiplier = getMultiplier(totalAmount, bet.position === BetPosition.BULL ? bullAmount : bearAmount)
-  return bet.amount * multiplier
+  if (total.eq(0) || amount.eq(0)) {
+    return ethers.FixedNumber.from(0)
+  }
+
+  const rewardAmountFixed = ethers.FixedNumber.from(total)
+  const multiplierAmountFixed = ethers.FixedNumber.from(amount)
+
+  return rewardAmountFixed.divUnsafe(multiplierAmountFixed)
 }
 
-// TODO: Move this to the UI Kit
-export const getBubbleGumBackground = (theme: DefaultTheme) => {
-  if (theme.isDark) {
-    return 'linear-gradient(139.73deg, #142339 0%, #24243D 47.4%, #37273F 100%)'
+export const getPriceDifference = (price: ethers.BigNumber, lockPrice: ethers.BigNumber) => {
+  if (!price || !lockPrice) {
+    return ethers.BigNumber.from(0)
   }
 
-  return 'linear-gradient(139.73deg, #E6FDFF 0%, #EFF4F5 46.87%, #F3EFFF 100%)'
+  return price.sub(lockPrice)
+}
+
+export const getRoundPosition = (lockPrice: ethers.BigNumber, closePrice: ethers.BigNumber) => {
+  if (!closePrice) {
+    return null
+  }
+
+  if (closePrice.eq(lockPrice)) {
+    return BetPosition.HOUSE
+  }
+
+  return closePrice.gt(lockPrice) ? BetPosition.BULL : BetPosition.BEAR
 }

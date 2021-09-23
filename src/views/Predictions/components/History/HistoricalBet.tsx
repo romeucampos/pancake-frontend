@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { useWeb3React } from '@web3-react/core'
 import {
   Box,
   ChevronDownIcon,
@@ -10,12 +9,16 @@ import {
   Text,
   WaitIcon,
 } from '@pancakeswap/uikit'
+import { useWeb3React } from '@web3-react/core'
 import styled from 'styled-components'
+import { useAppDispatch } from 'state'
 import { Bet, PredictionStatus } from 'state/types'
-import { useBetCanClaim, useGetCurrentEpoch, useGetPredictionsStatus } from 'state/hooks'
+import { REWARD_RATE } from 'state/predictions/config'
+import { useGetCurrentEpoch, useGetIsClaimable, useGetPredictionsStatus } from 'state/predictions/hooks'
+import { fetchLedgerData, markAsCollected } from 'state/predictions'
 import { getRoundResult, Result } from 'state/predictions/helpers'
 import { useTranslation } from 'contexts/Localization'
-import { formatBnb, getPayout } from '../../helpers'
+import { formatBnb, getNetPayout } from './helpers'
 import CollectWinningsButton from '../CollectWinningsButton'
 import ReclaimPositionButton from '../ReclaimPositionButton'
 import BetDetails from './BetDetails'
@@ -39,9 +42,11 @@ const HistoricalBet: React.FC<BetProps> = ({ bet }) => {
   const { amount, round } = bet
 
   const { t } = useTranslation()
-  const { account } = useWeb3React()
   const currentEpoch = useGetCurrentEpoch()
   const status = useGetPredictionsStatus()
+  const canClaim = useGetIsClaimable(bet.round.epoch)
+  const dispatch = useAppDispatch()
+  const { account } = useWeb3React()
 
   const toggleOpen = () => setIsOpen(!isOpen)
 
@@ -75,10 +80,9 @@ const HistoricalBet: React.FC<BetProps> = ({ bet }) => {
   const resultTextPrefix = getRoundPrefix(roundResult)
   const isOpenRound = round.epoch === currentEpoch
   const isLiveRound = status === PredictionStatus.LIVE && round.epoch === currentEpoch - 1
-  const canClaim = useBetCanClaim(account, bet.round.id)
 
   // Winners get the payout, otherwise the claim what they put it if it was canceled
-  const payout = roundResult === Result.WIN ? getPayout(bet) : amount
+  const payout = roundResult === Result.WIN ? getNetPayout(bet, REWARD_RATE) : amount
 
   const renderBetLabel = () => {
     if (isOpenRound) {
@@ -115,6 +119,12 @@ const HistoricalBet: React.FC<BetProps> = ({ bet }) => {
     )
   }
 
+  const handleSuccess = async () => {
+    // We have to mark the bet as claimed immediately because it does not update fast enough
+    dispatch(markAsCollected({ [bet.round.epoch]: true }))
+    dispatch(fetchLedgerData({ account, epochs: [bet.round.epoch] }))
+  }
+
   return (
     <>
       <StyledBet onClick={toggleOpen} role="button">
@@ -130,14 +140,7 @@ const HistoricalBet: React.FC<BetProps> = ({ bet }) => {
         </Box>
         <YourResult px="24px">{renderBetLabel()}</YourResult>
         {roundResult === Result.WIN && canClaim && (
-          <CollectWinningsButton
-            hasClaimed={!canClaim}
-            roundId={bet.round.id}
-            epoch={bet.round.epoch}
-            payout={payout}
-            scale="sm"
-            mr="8px"
-          >
+          <CollectWinningsButton hasClaimed={!canClaim} onSuccess={handleSuccess} scale="sm" mr="8px">
             {t('Collect')}
           </CollectWinningsButton>
         )}

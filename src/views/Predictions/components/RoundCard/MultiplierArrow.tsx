@@ -1,4 +1,5 @@
 import React from 'react'
+import { ethers } from 'ethers'
 import styled, { CSSProperties } from 'styled-components'
 import { Box, Flex, Text } from '@pancakeswap/uikit'
 import { useTranslation } from 'contexts/Localization'
@@ -7,12 +8,14 @@ import { RoundMultiplierDownArrow, RoundMultiplierUpArrow } from '../../RoundMul
 import EnteredTag from './EnteredTag'
 
 interface MultiplierArrowProps {
-  betAmount?: number
-  multiplier?: number
+  betAmount?: ethers.BigNumber
+  multiplier?: string
   hasEntered?: boolean
+  hasClaimed?: boolean
   betPosition?: BetPosition
   isDisabled?: boolean
   isActive?: boolean
+  isHouse?: boolean
 }
 
 const ArrowWrapper = styled.div`
@@ -40,8 +43,8 @@ const EnteredTagWrapper = styled.div`
 
 const getTextColor =
   (fallback = 'textSubtle') =>
-  (isActive: boolean, isDisabled: boolean) => {
-    if (isDisabled) {
+  (isActive: boolean, isDisabled: boolean, isHouse: boolean) => {
+    if (isDisabled || isHouse) {
       return 'textDisabled'
     }
 
@@ -56,19 +59,21 @@ const MultiplierArrow: React.FC<MultiplierArrowProps> = ({
   betAmount,
   multiplier,
   hasEntered = false,
+  hasClaimed = false,
   betPosition = BetPosition.BULL,
   isDisabled = false,
   isActive = false,
+  isHouse = false,
 }) => {
   const { t } = useTranslation()
-  const upColor = getTextColor('success')(isActive, isDisabled)
-  const downColor = getTextColor('failure')(isActive, isDisabled)
-  const textColor = getTextColor()(isActive, isDisabled)
+  const upColor = getTextColor('success')(isActive, isDisabled, isHouse)
+  const downColor = getTextColor('failure')(isActive, isDisabled, isHouse)
+  const textColor = getTextColor()(isActive, isDisabled, isHouse)
   const multiplierText = (
     <Box>
       <Flex justifyContent="center" height="14px">
         <Text fontSize="14px" color={textColor} bold lineHeight="14x">
-          {multiplier !== undefined ? `${multiplier.toLocaleString(undefined, { maximumFractionDigits: 2 })}x` : '-'}
+          {multiplier !== undefined ? `${multiplier}x` : '-'}
         </Text>
         <Text fontSize="14px" color={textColor} lineHeight="14x" ml="4px">
           {t('Payout')}
@@ -84,14 +89,14 @@ const MultiplierArrow: React.FC<MultiplierArrowProps> = ({
 
     return (
       <EnteredTagWrapper style={position}>
-        <EnteredTag amount={betAmount} />
+        <EnteredTag amount={betAmount} hasClaimed={hasClaimed} />
       </EnteredTagWrapper>
     )
   }
 
   if (betPosition === BetPosition.BEAR) {
     return (
-      <Box position="relative">
+      <Box mt="-1px" position="relative">
         <ArrowWrapper>
           <RoundMultiplierDownArrow isActive={isActive} />
           {getEnteredTag({ bottom: 0, right: 0 })}
@@ -107,7 +112,7 @@ const MultiplierArrow: React.FC<MultiplierArrowProps> = ({
   }
 
   return (
-    <Box position="relative">
+    <Box mb="-1px" position="relative">
       <ArrowWrapper>
         <RoundMultiplierUpArrow isActive={isActive} />
         {getEnteredTag({ top: 0, left: 0 })}

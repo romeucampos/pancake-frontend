@@ -2,14 +2,14 @@ import React from 'react'
 import styled from 'styled-components'
 import every from 'lodash/every'
 import { Stepper, Step, StepStatus, Card, CardBody, Heading, Text, Button, Link, OpenNewIcon } from '@pancakeswap/uikit'
+import { Link as RouterLink } from 'react-router-dom'
 import { BASE_ADD_LIQUIDITY_URL } from 'config'
 import { Ifo } from 'config/constants/types'
-import { WalletIfoData } from 'hooks/ifo/types'
+import { WalletIfoData } from 'views/Ifos/types'
 import { useTranslation } from 'contexts/Localization'
 import useTokenBalance from 'hooks/useTokenBalance'
-import Container from 'components/layout/Container'
-import { useProfile } from 'state/hooks'
-import { getAddress } from 'utils/addressHelpers'
+import Container from 'components/Layout/Container'
+import { useProfile } from 'state/profile/hooks'
 
 interface Props {
   ifo: Ifo
@@ -33,7 +33,7 @@ const IfoSteps: React.FC<Props> = ({ ifo, walletIfoData }) => {
   const { poolBasic, poolUnlimited } = walletIfoData
   const { hasProfile } = useProfile()
   const { t } = useTranslation()
-  const { balance } = useTokenBalance(getAddress(ifo.currency.address))
+  const { balance } = useTokenBalance(ifo.currency.address)
   const stepsValidationStatus = [
     hasProfile,
     balance.isGreaterThan(0),
@@ -66,7 +66,7 @@ const IfoSteps: React.FC<Props> = ({ ifo, walletIfoData }) => {
                 {t('Profile Active!')}
               </Text>
             ) : (
-              <Button as={Link} href="/profile">
+              <Button as={RouterLink} to="/profile">
                 {t('Activate your Profile')}
               </Button>
             )}

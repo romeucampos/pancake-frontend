@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import {
   ModalContainer,
@@ -13,23 +13,26 @@ import {
   Flex,
   Heading,
   Box,
-  LinkExternal,
   ModalCloseButton,
+  Skeleton,
 } from '@pancakeswap/uikit'
 import { useWeb3React } from '@web3-react/core'
-import { getBscScanTransactionUrl } from 'utils/bscscan'
 import { useAppDispatch } from 'state'
-import { usePriceBnbBusd } from 'state/hooks'
-import { markBetAsCollected } from 'state/predictions'
+import { REWARD_RATE } from 'state/predictions/config'
+import { fetchNodeHistory, markAsCollected } from 'state/predictions'
+import { Bet } from 'state/types'
 import { useTranslation } from 'contexts/Localization'
+import { useBNBBusdPrice } from 'hooks/useBUSDPrice'
 import useToast from 'hooks/useToast'
 import { usePredictionsContract } from 'hooks/useContract'
-import { formatBnb } from '../helpers'
+import { useCallWithGasPrice } from 'hooks/useCallWithGasPrice'
+import { ToastDescriptionWithTx } from 'components/Toast'
+import { useGetHistory, useGetIsFetchingHistory } from 'state/predictions/hooks'
+import { multiplyPriceByAmount } from 'utils/prices'
+import { formatNumber } from 'utils/formatBalance'
+import { getPayout } from './History/helpers'
 
 interface CollectRoundWinningsModalProps extends InjectedModalProps {
-  payout: number
-  roundId: string
-  epoch: number
   onSuccess?: () => Promise<void>
 }
 
@@ -45,55 +48,91 @@ const BunnyDecoration = styled.div`
   width: 100%;
 `
 
-const CollectRoundWinningsModal: React.FC<CollectRoundWinningsModalProps> = ({
-  payout,
-  roundId,
-  epoch,
-  onDismiss,
-  onSuccess,
-}) => {
+interface ClaimableRounds {
+  epochs: number[]
+  total: number
+}
+
+const calculateClaimableRounds = (history): ClaimableRounds => {
+  if (!history) {
+    return { epochs: [], total: 0 }
+  }
+
+  return history.reduce(
+    (accum: ClaimableRounds, bet: Bet) => {
+      if (!bet.claimed && bet.position === bet.round.position) {
+        const betPayout = getPayout(bet, REWARD_RATE)
+        return {
+          ...accum,
+          epochs: [...accum.epochs, bet.round.epoch],
+          total: accum.total + betPayout,
+        }
+      }
+
+      return accum
+    },
+    { epochs: [], total: 0 },
+  )
+}
+
+const CollectRoundWinningsModal: React.FC<CollectRoundWinningsModalProps> = ({ onDismiss, onSuccess }) => {
   const [isPendingTx, setIsPendingTx] = useState(false)
   const { account } = useWeb3React()
   const { t } = useTranslation()
   const { toastSuccess, toastError } = useToast()
+  const { callWithGasPrice } = useCallWithGasPrice()
   const predictionsContract = usePredictionsContract()
-  const bnbBusdPrice = usePriceBnbBusd()
+  const bnbBusdPrice = useBNBBusdPrice()
   const dispatch = useAppDispatch()
+  const isLoadingHistory = useGetIsFetchingHistory()
+  const history = useGetHistory()
 
-  const handleClick = () => {
-    predictionsContract.methods
-      .claim(epoch)
-      .send({ from: account })
-      .once('sending', () => {
-        setIsPendingTx(true)
-      })
-      .once('receipt', async (result) => {
-        if (onSuccess) {
-          await onSuccess()
-        }
+  const { epochs, total } = calculateClaimableRounds(history)
+  const totalBnb = multiplyPriceByAmount(bnbBusdPrice, total)
 
-        dispatch(markBetAsCollected({ account, roundId }))
-        onDismiss()
-        setIsPendingTx(false)
-        toastSuccess(
-          t('Winnings collected!'),
-          <Box>
-            <Text as="p" mb="8px">
-              {t('Your prizes have been sent to your wallet')}
-            </Text>
-            {result.transactionHash && (
-              <LinkExternal href={getBscScanTransactionUrl(result.transactionHash)}>
-                {t('View on BscScan')}
-              </LinkExternal>
-            )}
-          </Box>,
-        )
-      })
-      .once('error', (error) => {
-        setIsPendingTx(false)
-        toastError(t('Error'), error?.message)
-        console.error(error)
-      })
+  useEffect(() => {
+    // Fetch history if they have not opened the history pane yet
+    if (history.length === 0) {
+      dispatch(fetchNodeHistory({ account }))
+    }
+  }, [account, history, dispatch])
+
+  const handleClick = async () => {
+    try {
+      const tx = await callWithGasPrice(predictionsContract, 'claim', [epochs])
+      setIsPendingTx(true)
+      const receipt = await tx.wait()
+
+      // Immediately mark rounds as claimed
+      dispatch(
+        markAsCollected(
+          epochs.reduce((accum, epoch) => {
+            return { ...accum, [epoch]: true }
+          }, {}),
+        ),
+      )
+
+      if (onSuccess) {
+        await onSuccess()
+      }
+
+      onDismiss()
+      setIsPendingTx(false)
+      toastSuccess(
+        t('Winnings collected!'),
+        <ToastDescriptionWithTx txHash={receipt.transactionHash}>
+          {t('Your prizes have been sent to your wallet')}
+        </ToastDescriptionWithTx>,
+      )
+    } catch (error) {
+      console.error('Unable to claim winnings', error)
+      toastError(
+        t('Error'),
+        error?.data?.message || t('Please try again. Confirm the transaction and make sure you are paying enough gas!'),
+      )
+    } finally {
+      setIsPendingTx(false)
+    }
   }
 
   return (
@@ -109,20 +148,31 @@ const CollectRoundWinningsModal: React.FC<CollectRoundWinningsModalProps> = ({
       </ModalHeader>
       <ModalBody p="24px">
         <TrophyGoldIcon width="96px" mx="auto" mb="24px" />
-        <Flex alignItems="start" justifyContent="space-between" mb="24px">
+        <Flex alignItems="start" justifyContent="space-between" mb="8px">
           <Text>{t('Collecting')}</Text>
           <Box style={{ textAlign: 'right' }}>
-            <Text>{`${formatBnb(payout)} BNB`}</Text>
+            <Text>{`${formatNumber(total, 0, 4)} BNB`}</Text>
             <Text fontSize="12px" color="textSubtle">
-              {`~$${formatBnb(bnbBusdPrice.times(payout).toNumber())}`}
+              {`~$${totalBnb.toFixed(2)}`}
             </Text>
           </Box>
+        </Flex>
+        <Flex alignItems="start" justifyContent="center" mb="24px">
+          {isLoadingHistory ? (
+            <Skeleton height="21" width="140px" />
+          ) : (
+            <Text color="textSubtle" fontSize="14px">
+              {epochs.length === 1
+                ? t('From round %round%', { round: epochs[0] })
+                : t('From rounds %rounds%', { rounds: epochs.join(', ') })}
+            </Text>
+          )}
         </Flex>
         <Button
           width="100%"
           mb="8px"
           onClick={handleClick}
-          isLoading={isPendingTx}
+          isLoading={isPendingTx || isLoadingHistory}
           endIcon={isPendingTx ? <AutoRenewIcon spin color="currentColor" /> : null}
         >
           {t('Confirm')}

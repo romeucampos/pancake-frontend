@@ -13,11 +13,10 @@ import {
 } from '@pancakeswap/uikit'
 import { useAppDispatch } from 'state'
 import { HistoryFilter } from 'state/types'
-import { setHistoryFilter, setHistoryPaneState, fetchHistory } from 'state/predictions'
-import { useGetHistoryFilter, useGetIsFetchingHistory } from 'state/hooks'
+import { setHistoryFilter, setHistoryPaneState } from 'state/predictions'
+import { useGetHistoryFilter, useGetIsFetchingHistory } from 'state/predictions/hooks'
 import { useTranslation } from 'contexts/Localization'
 import styled from 'styled-components'
-import { getBubbleGumBackground } from '../../helpers'
 
 const Filter = styled.label`
   align-items: center;
@@ -27,12 +26,13 @@ const Filter = styled.label`
 `
 
 const StyledHeader = styled(Box)`
-  background: ${({ theme }) => getBubbleGumBackground(theme)};
+  background: ${({ theme }) => theme.colors.gradients.bubblegum};
   flex: none;
   padding: 16px;
 `
 
 const ButtonMenuContainer = styled.div`
+  margin-bottom: 16px;
   width: 100%;
   & > div {
     width: 100%;
@@ -42,18 +42,6 @@ const ButtonMenuContainer = styled.div`
     width: 100%;
   }
 `
-
-const getClaimParam = (historyFilter: HistoryFilter) => {
-  switch (historyFilter) {
-    case HistoryFilter.COLLECTED:
-      return true
-    case HistoryFilter.UNCOLLECTED:
-      return false
-    case HistoryFilter.ALL:
-    default:
-      return undefined
-  }
-}
 
 interface HeaderProps {
   activeTab: HistoryTabs
@@ -78,7 +66,6 @@ const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
 
   const handleChange = (newFilter: HistoryFilter) => async () => {
     if (newFilter !== historyFilter) {
-      await dispatch(fetchHistory({ account, claimed: getClaimParam(newFilter) }))
       dispatch(setHistoryFilter(newFilter))
     }
   }

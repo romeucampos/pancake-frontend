@@ -2,10 +2,10 @@ import React from 'react'
 import styled from 'styled-components'
 import { Flex, LinkExternal, Image, Text, PrizeIcon, Skeleton } from '@pancakeswap/uikit'
 import { useTranslation } from 'contexts/Localization'
-import { PublicIfoData } from 'hooks/ifo/types'
+import { PublicIfoData } from 'views/Ifos/types'
 import { Ifo } from 'config/constants/types'
 import { BIG_TEN } from 'utils/bigNumber'
-import { getBscScanAddressUrl } from 'utils/bscscan'
+import { getBscScanLink } from 'utils'
 
 const MIN_DOLLAR_FOR_ACHIEVEMENT = BIG_TEN
 
@@ -37,7 +37,7 @@ const StyledLinkExternal = styled(LinkExternal)`
 
 const Achievement: React.FC<Props> = ({ ifo, publicIfoData }) => {
   const { t } = useTranslation()
-  const tokenName = ifo.token.symbol.toLowerCase()
+  const tokenName = ifo.token.symbol?.toLowerCase()
   const campaignTitle = ifo.name
   const minLpForAchievement = MIN_DOLLAR_FOR_ACHIEVEMENT.div(publicIfoData.currencyPriceInUSD).toNumber()
 
@@ -71,7 +71,7 @@ const Achievement: React.FC<Props> = ({ ifo, publicIfoData }) => {
         <StyledLinkExternal href={ifo.articleUrl} mb="8px">
           {t('Learn more about %title%', { title: campaignTitle })}
         </StyledLinkExternal>
-        <StyledLinkExternal href={getBscScanAddressUrl(ifo.address)}>{t('View Contract')}</StyledLinkExternal>
+        <StyledLinkExternal href={getBscScanLink(ifo.address, 'address')}>{t('View Contract')}</StyledLinkExternal>
       </Flex>
     </Container>
   )

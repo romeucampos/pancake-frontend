@@ -16,17 +16,18 @@ import {
   Link,
   HelpIcon,
 } from '@pancakeswap/uikit'
-import { BASE_BSC_SCAN_URL, BASE_URL } from 'config'
-import { useBlock, useCakeVault } from 'state/hooks'
-import { Pool } from 'state/types'
+import { BASE_BSC_SCAN_URL } from 'config'
+import { useBlock } from 'state/block/hooks'
+import { useCakeVault } from 'state/pools/hooks'
+import { DeserializedPool } from 'state/types'
 import { getAddress, getCakeVaultAddress } from 'utils/addressHelpers'
 import { registerToken } from 'utils/wallet'
-import { getBscScanBlockCountdownUrl } from 'utils/bscscan'
+import { getBscScanLink } from 'utils'
 import Balance from 'components/Balance'
 import { getPoolBlockInfo } from 'views/Pools/helpers'
 
 interface ExpandedFooterProps {
-  pool: Pool
+  pool: DeserializedPool
   account: string
 }
 
@@ -57,11 +58,10 @@ const ExpandedFooter: React.FC<ExpandedFooterProps> = ({ pool, account }) => {
     isAutoVault,
   } = pool
 
-  const tokenAddress = earningToken.address ? getAddress(earningToken.address) : ''
+  const tokenAddress = earningToken.address || ''
   const poolContractAddress = getAddress(contractAddress)
   const cakeVaultContractAddress = getCakeVaultAddress()
-  const imageSrc = `${BASE_URL}/images/tokens/${tokenAddress}.png`
-  const isMetaMaskInScope = !!(window as WindowChain).ethereum?.isMetaMask
+  const isMetaMaskInScope = !!window.ethereum?.isMetaMask
   const isManualCakePool = sousId === 0
 
   const { shouldShowBlockCountdown, blocksUntilStart, blocksRemaining, hasPoolStarted, blocksToDisplay } =
@@ -120,7 +120,7 @@ const ExpandedFooter: React.FC<ExpandedFooterProps> = ({ pool, account }) => {
           <Text small>{hasPoolStarted ? t('Ends in') : t('Starts in')}:</Text>
           {blocksRemaining || blocksUntilStart ? (
             <Flex alignItems="center">
-              <Link external href={getBscScanBlockCountdownUrl(hasPoolStarted ? endBlock : startBlock)}>
+              <Link external href={getBscScanLink(hasPoolStarted ? endBlock : startBlock, 'countdown')}>
                 <Balance small value={blocksToDisplay} decimals={0} color="primary" />
                 <Text small ml="4px" color="primary" textTransform="lowercase">
                   {t('Blocks')}
@@ -140,15 +140,19 @@ const ExpandedFooter: React.FC<ExpandedFooterProps> = ({ pool, account }) => {
             {t('Performance Fee')}
           </TooltipText>
           <Flex alignItems="center">
-            <Text ml="4px" small>
-              {performanceFee / 100}%
-            </Text>
+            {performanceFee ? (
+              <Text ml="4px" small>
+                {performanceFee / 100}%
+              </Text>
+            ) : (
+              <Skeleton width="90px" height="21px" />
+            )}
           </Flex>
         </Flex>
       )}
       <Flex mb="2px" justifyContent="flex-end">
-        <LinkExternal href={`https://pancakeswap.info/token/${getAddress(earningToken.address)}`} bold={false} small>
-          {t('Info site')}
+        <LinkExternal href={`/info/token/${earningToken.address}`} bold={false} small>
+          {t('See Token Info')}
         </LinkExternal>
       </Flex>
       <Flex mb="2px" justifyContent="flex-end">
@@ -173,7 +177,7 @@ const ExpandedFooter: React.FC<ExpandedFooterProps> = ({ pool, account }) => {
             variant="text"
             p="0"
             height="auto"
-            onClick={() => registerToken(tokenAddress, earningToken.symbol, earningToken.decimals, imageSrc)}
+            onClick={() => registerToken(tokenAddress, earningToken.symbol, earningToken.decimals)}
           >
             <Text color="primary" fontSize="14px">
               {t('Add to Metamask')}
