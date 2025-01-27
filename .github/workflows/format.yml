@@ -4,26 +4,18 @@ on:
   pull_request:
 
 jobs:
-  commitlint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - uses: wagoid/commitlint-github-action@v2
-        with:
-          configFile: .commitlintrc.json
-          helpURL: https://docs.pancakeswap.finance/code/contributing#committing
   code:
     runs-on: ubuntu-latest
+    timeout-minutes: 6
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Setup Node
-        uses: actions/setup-node@v2.1.2
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          node-version: 14.x
+          fetch-depth: 2
+
       - name: Install dependencies
-        run: yarn install
-      - name: Run prettier
-        run: yarn format:check
+        uses: './.github/actions/install-deps'
+
+      - name: Run Prettier
+        run: pnpm format:check
